@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uno Game Logger</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 15px; color: #333; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        h1, h2 { margin-top: 0; color: #d32f2f; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { background: #d32f2f; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #b71c1c; }
+        .player-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .score-input-group { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .score-input-group label { flex: 1; font-weight: bold; }
+        .score-input-group input { flex: 1; }
+        .badge { background: #ffeb3b; color: #000; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🔴 Yellow & Red Uno Logger</h1>
+
+    <!-- Setup Screen -->
+    <div id="setup-screen" class="card">
+        <h2>Game Setup</h2>
+        <label for="player-names">Player Names (comma separated):</label>
+        <input type="text" id="player-names" value="Alex, Sam, Taylor" placeholder="e.g. Alex, Sam, Taylor">
+        
+        <label for="target-score">Target Score to End Game:</label>
+        <input type="number" id="target-score" value="500">
+
+        <label for="win-condition">Win Condition:</label>
+        <select id="win-condition">
+            <option value="highest">Standard (First to hit target loses, lowest score wins)</option>
+            <option value="lowest">Race to Zero (Negative scoring house rule)</option>
+        </select>
+
+        <button onclick="startGame()">Start Match</button>
+    </div>
+
+    <!-- Active Game Screen -->
+    <div id="game-screen" class="card" style="display:none;">
+        <h2>Leaderboard</h2>
+        <div id="leaderboard"></div>
+        <button onclick="openRoundModal()" style="background: #2e7d32; margin-top: 20px;">Log Next Round</button>
+        <button onclick="resetGame()" style="background: #757575;">Reset Entire Match</button>
+    </div>
+
+    <!-- Round Scoring Screen -->
+    <div id="round-screen" class="card" style="display:none;">
+        <h2>Enter Round Scores</h2>
+        <p style="font-size: 14px; color: #666;">Enter the point value of remaining cards for each player.</p>
+        <div id="round-inputs"></div>
+        <button onclick="submitRound()">Save Round</button>
+        <button onclick="cancelRound()" style="background: #757575;">Cancel</button>
+    </div>
+
+    <script>
+        let players = [];
+        let targetScore = 500;
+        let winCondition = 'highest';
+
+        function startGame() {
+            const nameInput = document.getElementById('player-names').value;
+            targetScore = parseInt(document.getElementById('target-score').value) || 500;
+            winCondition = document.getElementById('win-condition').value;
+
+            const names = nameInput.split(',').map(n => n.trim()).filter(n => n.length > 0);
+            if (names.length < 2) {
+                alert('Please enter at least 2 players.');
+                return;
+            }
+
+            players = names.map(name => ({ name: name, score: 0 }));
+            
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            updateLeaderboard();
+        }
+
+        function updateLeaderboard() {
+            // Sort standard (lowest score is winning) or negative (highest score/closest to 0 is winning)
+            if (winCondition === 'highest') {
+                players.sort((a, b) => a.score - b.score);
+            } else {
+                players.sort((a, b) => b.score - a.score);
+            }
+
+            const container = document.getElementById('leaderboard');
+            container.innerHTML = '';
+
+            players.forEach((player, index) => {
+                const row = document.createElement('div');
+                row.className = 'player-row';
+                
+                let badge = '';
+                if (index === 0) badge = '<span class="badge">👑 1st</span>';
+                
+                row.innerHTML = `<div>${badge} <strong>${player.name}</strong></div> <div>${player.score} pts</div>`;
+                container.appendChild(row);
+            });
+
+            checkGameOver();
+        }
+
+        function openRoundModal() {
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('round-screen').style.display = 'block';
+
+            const container = document.getElementById('round-inputs');
+            container.innerHTML = '';
+
+            players.forEach(player => {
+                const group = document.createElement('div');
+                group.className = 'score-input-group';
+                group.innerHTML = `
+                    <label>${player.name}:</label>
+                    <input type="number" class="round-score-field" data-name="${player.name}" value="0">
+                `;
+                container.appendChild(group);
+            });
+        }
+
+        function submitRound() {
+            const inputs = document.querySelectorAll('.round-score-field');
+            inputs.forEach(input => {
+                const name = input.getAttribute('data-name');
+                const val = parseInt(input.value) || 0;
+                
+                const player = players.find(p => p.name === name);
+                if (player) {
+                    if (winCondition === 'lowest') {
+                        player.score -= val; // House rule negative scoring
+                    } else {
+                        player.score += val; // Standard scoring
+                    }
+                }
+            });
+
+            document.getElementById('round-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            updateLeaderboard();
+        }
+
+        function cancelRound() {
+            document.getElementById('round-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+        }
+
+        function checkGameOver() {
+            if (winCondition === 'highest') {
+                const loser = players.find(p => p.score >= targetScore);
+                if (loser) {
+                    const winner = players[0];
+                    alert(`💥 Game Over! ${loser.name} crossed ${targetScore} points.\n🏆 The winner is ${winner.name} with ${winner.score} points!`);
+                }
+            } else {
+                // For negative scoring racing down to a target limit
+                const trigger = players.find(p => p.score <= -targetScore);
+                if (trigger) {
+                    const winner = players[0];
+                    alert(`💥 Game Over! Limit reached.\n🏆 The winner is ${winner.name}!`);
+                }
+            }
+        }
+
+        function resetGame() {
+            if (confirm('Are you sure you want to clear this game?')) {
+                document.getElementById('setup-screen').style.display = 'block';
+                document.getElementById('game-screen').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
